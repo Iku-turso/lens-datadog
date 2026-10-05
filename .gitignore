@@ -1,0 +1,5 @@
+dist/
+node_modules/
+tsconfig.tsbuildinfo
+.claude/settings.local.json
+.claude/skills/lens-function-*/

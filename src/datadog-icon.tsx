@@ -1,0 +1,8 @@
+import { Svg, type SizePluginProps } from "@k8slens/element-components";
+
+/** A bold, single-shape mark for Datadog rows: a dog's head in a speech bubble outline. */
+export const DatadogIcon = (props: SizePluginProps) => (
+  <Svg viewBox="0 0 24 24" fill="currentColor" {...props}>
+    <path d="M5 4.5 9 7h6l4-2.5-.6 5.2c.4.9.6 1.9.6 2.8C19 16.6 15.9 20 12 20s-7-3.4-7-7.5c0-.9.2-1.9.6-2.8L5 4.5Zm4.5 7a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Zm5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5ZM12 15.2c-.9 0-1.5.5-1.5 1s.6 1.3 1.5 1.3 1.5-.8 1.5-1.3-.6-1-1.5-1Z" />
+  </Svg>
+);
