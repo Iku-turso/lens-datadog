@@ -6,10 +6,13 @@ import { observer } from "mobx-react";
 import { Suspense } from "react";
 import { AgentStatus } from "./agent-status-badge";
 import { openDatadogTabInjectable } from "./datadog-tab.injectable";
+import { datadogTabInFrontInjectable } from "./datadog-tab-in-front.injectable";
 import { DatadogErrorBoundary } from "./error-boundary";
 
 const DatadogStatusBarItem = observer(() => {
-  const clusterId = useInject(activeTabClusterIdReactiveInjectionToken)().get();
+  // A Datadog tab is about a cluster without being its tab, so fall back to the one in front.
+  const datadogTabInFront = useInject(datadogTabInFrontInjectable)();
+  const clusterId = useInject(activeTabClusterIdReactiveInjectionToken)().get() ?? datadogTabInFront.get();
   const openDatadogTab = useInject(openDatadogTabInjectable)();
 
   if (!clusterId) {

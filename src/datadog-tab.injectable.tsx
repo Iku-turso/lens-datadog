@@ -1,9 +1,8 @@
 import { AskAiTerminal } from "@k8slens/ask-ai-contracts";
 import { clusterNameReactiveInjectionToken } from "@k8slens/cluster-contracts";
-import { dropDownMenu, getDropDownMenuItemInjectableBunch, getDropDownMenuKind } from "@k8slens/drop-down-menu-contracts";
-import { Button, Div, H2, H3, Span } from "@k8slens/element-components";
+import { Div, Span } from "@k8slens/element-components";
 import { getInjectable2 } from "@k8slens/injectable";
-import { PlainButton, SingleSelect } from "@k8slens/input-components";
+import { PlainButton } from "@k8slens/input-components";
 import { runKubectlInjectionToken } from "@k8slens/kubectl-contracts";
 import { mainViewTabHostKind } from "@k8slens/main-view-contracts";
 import { getSubscribableInjectableBunch } from "@k8slens/subscribable";
@@ -13,15 +12,22 @@ import { LightWeightTabs } from "@k8slens/tabs-components";
 import { useInject, useSyncInject } from "@k8slens/use-inject";
 import { action } from "mobx";
 import { observer } from "mobx-react";
-import { Suspense, use } from "react";
+import { Suspense, use, useEffect } from "react";
 import { AgentStatus } from "./agent-status-badge";
 import { openClusterOverviewInjectable } from "./cluster-overview.injectable";
 import { DatadogIcon } from "./datadog-icon";
-import { type DatadogScope, metricDefinitions } from "./datadog-queries";
+import { Dropdown } from "./dropdown.injectable";
+import { type DatadogScope, eventQuery, metricDefinitions } from "./datadog-queries";
+import { datadogSiteInjectable, eventsTableKind, monitorsTableKind } from "./datadog-tables.injectable";
+import { eventExplorerLink, monitorsLink } from "./datadog-queries";
+import { openUrlInBrowserInjectable } from "./open-in-datadog.injectable";
+import { ClickableDiv } from "@k8slens/element-components";
+import { Table } from "@k8slens/table-contracts";
 import { DatadogErrorBoundary } from "./error-boundary";
 import { useDatadogClusterName } from "./use-datadog-cluster-name";
 import { type DatadogTabView, tabNamespaceInjectable, tabViewInjectable, viewRangeInjectable } from "./view-state.injectable";
-import { EventList, MetricChart, MonitorList, MonitorSummary, Muted, Piece, RangeSelector } from "./views";
+import { datadogTabInFrontInjectable } from "./datadog-tab-in-front.injectable";
+import { MetricChart, MonitorSummary, Muted, Piece, RangeSelector, SectionTitle } from "./views";
 
 /** One Datadog tab per cluster; the tab id is the Lens cluster id. */
 export const datadogTabKind = getTabKind()("datadog-cluster");
@@ -70,16 +76,14 @@ export const clusterNamespacesBunch = getSubscribableInjectableBunch<string[], [
   },
 });
 
-const namespaceMenuKind = getDropDownMenuKind<{ readonly tabId: string }>()("datadog-namespace-menu");
-
-const NamespaceOptions = observer(({ data }: { data: { readonly tabId: string } }) => {
-  const namespace = useSyncInject(tabNamespaceInjectable, data.tabId);
-  const { value } = useSubscribable(useSyncInject(clusterNamespacesBunch.subscribable, data.tabId));
+const NamespacePicker = observer(({ tabId }: { tabId: string }) => {
+  const namespace = useSyncInject(tabNamespaceInjectable, tabId);
+  const { value } = useSubscribable(useSyncInject(clusterNamespacesBunch.subscribable, tabId));
   const namespaces = use(value).get();
 
   return (
-    <SingleSelect
-      $padding="xs"
+    <Dropdown
+      aria-label="Namespace"
       options={[{ id: "", label: "All namespaces" }, ...namespaces.map((name) => ({ id: name, label: name }))]}
       selected={namespace.get()}
       onSelect={(selected) => action(() => namespace.set(selected))()}
@@ -87,32 +91,19 @@ const NamespaceOptions = observer(({ data }: { data: { readonly tabId: string } 
   );
 });
 
-const NamespaceMenuItem = ({ data }: { data: { readonly tabId: string } }) => (
-  <Div $height={{ max: "11xl" }} $overflow={{ y: "auto" }}>
-    <Piece loading="Loading namespaces…">
-      <NamespaceOptions data={data} />
-    </Piece>
-  </Div>
-);
+// --- The tab -------------------------------------------------------------------------------
 
-export const namespaceMenuItem = getDropDownMenuItemInjectableBunch({
-  id: "datadog-namespace-menu-options",
-  kind: namespaceMenuKind,
-  orderNumber: 10,
-  Component: NamespaceMenuItem,
-});
-
-const NamespacePicker = observer(({ tabId }: { tabId: string }) => {
-  const namespace = useSyncInject(tabNamespaceInjectable, tabId).get();
+/** A link to the same list on the Datadog website, above a table. */
+const OpenInDatadog = observer(({ url, children }: { url: (site: Parameters<typeof monitorsLink>[0]) => string; children: string }) => {
+  const site = useInject(datadogSiteInjectable)().get();
+  const openUrl = useInject(openUrlInBrowserInjectable)();
 
   return (
-    <Button $dropDownMenu={dropDownMenu(namespaceMenuKind, { data: { tabId } })} $padding={{ horizontal: "s", vertical: "xxs" }} $border={{ color: "grey60", radius: "s" }}>
-      {namespace || "All namespaces"} ▾
-    </Button>
+    <ClickableDiv $onClick={() => openUrl(url(site))} $color="link" $flexChild="fixed">
+      {children}
+    </ClickableDiv>
   );
 });
-
-// --- The tab -------------------------------------------------------------------------------
 
 const views: readonly { id: DatadogTabView; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -132,16 +123,16 @@ const Overview = observer(({ tabId, scope }: { tabId: string; scope: DatadogScop
         ))}
       </Div>
       <Div $flex={{ direction: "vertical", gap: "s" }}>
-        <H3>Monitors</H3>
+        <SectionTitle>Monitors</SectionTitle>
         <Piece>
           <MonitorSummary />
         </Piece>
       </Div>
       <Div $flex={{ direction: "vertical", gap: "s" }}>
-        <H3>Recent events</H3>
-        <Piece>
-          <EventList scope={scope} rangeId={rangeId} limit={10} />
-        </Piece>
+        <SectionTitle>Recent events</SectionTitle>
+        <Div style={{ height: "24rem" }}>
+          <Table kind={eventsTableKind} params={[eventQuery(scope), rangeId]} />
+        </Div>
       </Div>
     </Div>
   );
@@ -151,7 +142,7 @@ const AskAi = ({ clusterId, clusterName }: { clusterId: string; clusterName: str
   const scopeIds = useInject(ownScopeIdsInjectable)();
 
   return (
-    <Div $height={{ height: "full", min: "11xl" }}>
+    <Div $height="full">
       <AskAiTerminal
         sessionId={`datadog.cluster-assistant.${clusterId}`}
         clusterId={clusterId}
@@ -170,12 +161,22 @@ const DatadogTabContent = observer(({ tabId }: TabProps<typeof mainViewTabHostKi
   const range = useSyncInject(viewRangeInjectable, tabId);
   const namespace = useSyncInject(tabNamespaceInjectable, tabId).get();
   const openClusterOverview = useInject(openClusterOverviewInjectable)();
+  const tabInFront = useInject(datadogTabInFrontInjectable)();
+
+  useEffect(() => {
+    action(() => tabInFront.set(clusterId))();
+
+    return action(() => {
+      if (tabInFront.get() === clusterId) tabInFront.set(undefined);
+    });
+  }, [clusterId, tabInFront]);
+
   const scope: DatadogScope = { clusterName: clusterName.name ?? undefined, namespace: namespace || undefined };
 
   return (
-    <Div $flex={{ direction: "vertical", gap: "m" }} $padding="l" $height="full" $overflow={{ y: "auto" }}>
+    <Div $flex={{ direction: "vertical", gap: "m" }} $padding="l" $height="full">
       <Div $flex={{ direction: "horizontal", gap: "m", verticalAlign: "center", wrap: true }}>
-        <H2>Datadog · {lensName}</H2>
+        <Span $font={{ size: "xxl", bold: true }}>Datadog · {lensName}</Span>
         <DatadogErrorBoundary fallback={() => null}>
           <Suspense fallback={null}>
             <AgentStatus clusterId={clusterId} />
@@ -192,23 +193,37 @@ const DatadogTabContent = observer(({ tabId }: TabProps<typeof mainViewTabHostKi
         <LightWeightTabs tabs={views} selected={view.get()} onSelect={(id) => id && action(() => view.set(id))()} />
         {view.get() !== "ask-ai" && view.get() !== "monitors" && (
           <>
-            <NamespacePicker tabId={tabId} />
+            <Piece loading="Loading namespaces…">
+              <NamespacePicker tabId={tabId} />
+            </Piece>
             <RangeSelector range={range} />
           </>
         )}
       </Div>
-      {view.get() === "overview" && <Overview tabId={tabId} scope={scope} />}
+      {view.get() === "overview" && (
+        <Div $flexChild style={{ minHeight: 0 }} $overflow={{ y: "auto" }}>
+          <Overview tabId={tabId} scope={scope} />
+        </Div>
+      )}
+      {view.get() === "monitors" && <OpenInDatadog url={monitorsLink}>Manage monitors in Datadog →</OpenInDatadog>}
       {view.get() === "monitors" && (
-        <Piece>
-          <MonitorList />
-        </Piece>
+        <Div $flexChild style={{ minHeight: 0 }}>
+          <Table kind={monitorsTableKind} params={[]} />
+        </Div>
       )}
       {view.get() === "events" && (
-        <Piece>
-          <EventList scope={scope} rangeId={range.get()} />
-        </Piece>
+        <OpenInDatadog url={(site) => eventExplorerLink(site, scope, range.get())}>Open in Datadog's event explorer →</OpenInDatadog>
       )}
-      {view.get() === "ask-ai" && <AskAi clusterId={clusterId} clusterName={clusterName.name} />}
+      {view.get() === "events" && (
+        <Div $flexChild style={{ minHeight: 0 }}>
+          <Table kind={eventsTableKind} params={[eventQuery(scope), range.get()]} />
+        </Div>
+      )}
+      {view.get() === "ask-ai" && (
+        <Div $flexChild style={{ minHeight: 0 }}>
+          <AskAi clusterId={clusterId} clusterName={clusterName.name} />
+        </Div>
+      )}
     </Div>
   );
 });

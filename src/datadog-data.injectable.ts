@@ -98,7 +98,13 @@ interface EventsResponse {
       readonly timestamp?: string;
       readonly message?: string;
       readonly tags?: readonly string[];
-      readonly attributes?: { readonly title?: string; readonly status?: string; readonly timestamp?: number; readonly source_type_name?: string };
+      readonly attributes?: {
+        readonly title?: string;
+        readonly status?: string;
+        readonly timestamp?: number;
+        readonly source_type_name?: string;
+        readonly _dd?: { readonly source_type_name?: string };
+      };
     };
   }[];
 }
@@ -130,7 +136,12 @@ export const searchEventsInjectable = getInjectable2({
             title: inner.title || message.split("\n")[0] || "(untitled event)",
             message,
             status: inner.status ?? "info",
-            source: inner.source_type_name ?? null,
+            // Where the event came from: Kubernetes, Monitor Alert, Docker and so on.
+            source:
+              inner._dd?.source_type_name ??
+              inner.source_type_name ??
+              attributes.tags?.find((tag) => tag.startsWith("source:"))?.slice("source:".length) ??
+              null,
           };
         });
       };

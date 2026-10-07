@@ -42,7 +42,7 @@ export const metricDefinitions: readonly MetricDefinition[] = [
   { id: "memory", label: "Memory", metric: "container.memory.usage", unit: "bytes", scale: 1 },
   { id: "network_rx", label: "Network in", metric: "container.net.rcvd", unit: "bytes/s", scale: 1 },
   { id: "network_tx", label: "Network out", metric: "container.net.sent", unit: "bytes/s", scale: 1 },
-  { id: "restarts", label: "Container restarts", metric: "kubernetes.containers.restarts", unit: "count", scale: 1 },
+  { id: "restarts", label: "Container restarts (total)", metric: "kubernetes.containers.restarts", unit: "count", scale: 1 },
 ];
 
 export const metricDefinition = (id: MetricId) => {
@@ -103,11 +103,15 @@ export const metricExplorerLink = (site: DatadogSite, definition: MetricDefiniti
   })}`;
 };
 
-export const eventExplorerLink = (site: DatadogSite, scope: DatadogScope, rangeId: RangeId, eventId?: string) => {
+export const eventExplorerLink = (site: DatadogSite, scope: DatadogScope, rangeId: RangeId, eventId?: string) =>
+  eventExplorerLinkForQuery(site, eventQuery(scope), rangeId, eventId);
+
+/** The same, for an event query already built. */
+export const eventExplorerLinkForQuery = (site: DatadogSite, eventsQuery: string, rangeId: RangeId, eventId?: string) => {
   const { from, to } = rangeWindow(rangeId);
 
   return `${appBaseUrl(site)}/event/explorer?${query({
-    query: eventQuery(scope),
+    query: eventsQuery,
     from_ts: String(from),
     to_ts: String(to),
     live: "true",
@@ -132,7 +136,10 @@ export const formatValue = (value: number, unit: MetricDefinition["unit"]) => {
   }
 
   if (unit === "cores") {
-    return value < 1 ? `${Math.round(value * 1000)}m` : `${value.toFixed(2)} cores`;
+    // Written out: Kubernetes' "34m" reads as minutes next to a time range.
+    const millicores = Math.round(value * 1000);
+
+    return value < 1 ? `${millicores} millicore${millicores === 1 ? "" : "s"}` : `${value.toFixed(2)} cores`;
   }
 
   return `${Math.round(value)}`;

@@ -1,6 +1,6 @@
 import { allClusterRecordsReactiveInjectionToken, type ClusterRecord } from "@k8slens/cluster-contracts";
 import { Div, Span } from "@k8slens/element-components";
-import { PrimaryButton, type SelectOption, SingleSelect, TextInput } from "@k8slens/input-components";
+import { PrimaryButton, type SelectOption, TextInput } from "@k8slens/input-components";
 import { getExtensionPreferencePageInjectableBunch } from "@k8slens/preferences-contracts";
 import { useInject, useSyncInject } from "@k8slens/use-inject";
 import { action, type IObservableValue, type ObservableMap } from "mobx";
@@ -8,7 +8,8 @@ import { observer } from "mobx-react";
 import { type ReactNode, Suspense, use } from "react";
 import packageJson from "../package.json";
 import { connectionCheckStateInjectable, runConnectionCheckInjectable } from "./connection-check.injectable";
-import { type DatadogSite, datadogSites } from "./datadog-sites";
+import { type DatadogSite, datadogSites, isDatadogSite } from "./datadog-sites";
+import { Dropdown } from "./dropdown.injectable";
 import { datadogClusterNamesBunch, type DatadogSettings, datadogSettingsBunch } from "./settings.injectable";
 
 const siteOptions: readonly SelectOption<DatadogSite>[] = Object.entries(datadogSites).map(([id, { label }]) => ({
@@ -33,7 +34,16 @@ const Loading = () => <Span $color="textMuted">Loading…</Span>;
 const SiteSelect = observer(() => {
   const settings = use(useSyncInject(datadogSettingsBunch.persistable));
 
-  return <SingleSelect options={siteOptions} selected={settings.get().site} onSelect={(site) => change(settings, { site })} />;
+  return (
+    <Div $flex={{ direction: "horizontal" }}>
+      <Dropdown
+        aria-label="Datadog site"
+        options={siteOptions}
+        selected={settings.get().site}
+        onSelect={(site) => isDatadogSite(site) && change(settings, { site })}
+      />
+    </Div>
+  );
 });
 
 const SiteBlock = () => (
@@ -52,16 +62,18 @@ const KeyInputs = observer(() => {
 
   return (
     <Div $flex={{ direction: "vertical", gap: "s" }}>
+      <Span $font={{ bold: true }}>API key</Span>
       <TextInput
         type="password"
-        placeholder="API key"
+        placeholder="32 hexadecimal characters"
         aria-label="Datadog API key"
         value={apiKey}
         onChange={(event) => change(settings, { apiKey: event.target.value.trim() })}
       />
+      <Span $font={{ bold: true }}>Application key</Span>
       <TextInput
         type="password"
-        placeholder="Application key"
+        placeholder="Starts with ddapp_"
         aria-label="Datadog application key"
         value={applicationKey}
         onChange={(event) => change(settings, { applicationKey: event.target.value.trim() })}
@@ -89,8 +101,8 @@ const KeysBlock = () => (
 );
 
 const ClusterNameRow = observer(({ cluster, clusterNames }: { cluster: ClusterRecord; clusterNames: ObservableMap<string, string> }) => (
-  <Div $flex={{ direction: "horizontal", gap: "m", verticalAlign: "center" }}>
-    <Span $width="11xl">{cluster.name.get()}</Span>
+  <>
+    <Span $font={{ noWrap: true }}>{cluster.name.get()}</Span>
     <TextInput
       placeholder="Detected from the Datadog Agent"
       aria-label={`Datadog cluster name of ${cluster.name.get()}`}
@@ -101,7 +113,7 @@ const ClusterNameRow = observer(({ cluster, clusterNames }: { cluster: ClusterRe
         action(() => (value ? clusterNames.set(cluster.id, value) : clusterNames.delete(cluster.id)))();
       }}
     />
-  </Div>
+  </>
 ));
 
 const ClusterNames = observer(() => {
@@ -113,7 +125,7 @@ const ClusterNames = observer(() => {
   }
 
   return (
-    <Div $flex={{ direction: "vertical", gap: "s" }}>
+    <Div style={{ display: "grid", gridTemplateColumns: "max-content 1fr", alignItems: "center", columnGap: "1rem", rowGap: "0.5rem" }}>
       {clusters.map((cluster) => (
         <ClusterNameRow key={cluster.id} cluster={cluster} clusterNames={clusterNames} />
       ))}

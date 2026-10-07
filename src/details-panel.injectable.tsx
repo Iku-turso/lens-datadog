@@ -1,37 +1,23 @@
-import { Badge } from "@k8slens/badge";
-import { DrawerItem, NoItemsDetailItem } from "@k8slens/details-panel-components";
+
+import { DrawerItem, DrawerSubTitle } from "@k8slens/details-panel-components";
 import { buildDetailsPanelSectionBunch } from "@k8slens/details-panel-contracts";
-import { ClickableDiv, Div, Span } from "@k8slens/element-components";
+import { Div, Span } from "@k8slens/element-components";
 import { PlainButton } from "@k8slens/input-components";
-import {
-  appsV1,
-  batchV1,
-  coreV1,
-  cronJobKind,
-  daemonSetKind,
-  deploymentKind,
-  jobKind,
-  namespaceKind,
-  nodeKind,
-  podKind,
-  replicaSetKind,
-  serviceKind,
-  statefulSetKind,
-} from "@k8slens/kubernetes-contracts";
+import { appsV1, batchV1, coreV1, cronJobKind, daemonSetKind, deploymentKind, jobKind, namespaceKind, nodeKind, podKind, replicaSetKind, serviceKind, statefulSetKind } from "@k8slens/kubernetes-contracts";
 import { navigateToPreferencesInjectionToken } from "@k8slens/preferences-contracts";
-import { useSubscribable } from "@k8slens/subscribable-react";
 import { useInject, useSyncInject } from "@k8slens/use-inject";
 import { observer } from "mobx-react";
 import { use } from "react";
 import packageJson from "../package.json";
-import { buildDatadogLinks, buildMonitorLink, datadogViews } from "./datadog-links";
-import { type DatadogScope, metricDefinition } from "./datadog-queries";
-import { type MonitorGroup, monitorGroupsBunch } from "./monitor-groups.injectable";
+import { buildDatadogLinks, datadogViews } from "./datadog-links";
+import { type DatadogScope, eventQuery, metricDefinition } from "./datadog-queries";
 import { openUrlInBrowserInjectable } from "./open-in-datadog.injectable";
 import { datadogSettingsBunch } from "./settings.injectable";
 import { useDatadogClusterName } from "./use-datadog-cluster-name";
 import { viewRangeInjectable } from "./view-state.injectable";
-import { EventList, MetricChart, Piece, RangeSelector, statusColor } from "./views";
+import { MetricChart, Piece, RangeSelector } from "./views";
+import { Table } from "@k8slens/table-contracts";
+import { eventsTableKind, monitorGroupsTableKind } from "./datadog-tables.injectable";
 
 interface SectionProps {
   readonly clusterId: string;
@@ -95,49 +81,33 @@ const Telemetry = observer(({ clusterId, kind, name, namespace }: ResourceProps)
           ))}
         </Div>
       </DrawerItem>
-      <DrawerItem name="Events">
-        <Piece loading="Loading events…">
-          <EventList scope={scope} rangeId={range.get()} limit={5} />
-        </Piece>
-      </DrawerItem>
+      <DrawerSubTitle>Events</DrawerSubTitle>
+      <Div style={{ height: "14rem" }}>
+        <Table kind={eventsTableKind} params={[eventQuery(scope), range.get()]} />
+      </Div>
     </>
   );
 });
 
-const MonitorRow = ({ group, onOpen }: { group: MonitorGroup; onOpen: () => void }) => (
-  <Div $flex={{ direction: "horizontal", gap: "s", verticalAlign: "center" }}>
-    <Badge label={group.status} small $backgroundColor={statusColor(group.status)} $color="white" />
-    <ClickableDiv $onClick={onOpen} $tooltip={`Group: ${group.group}`} $color="link">
-      {group.monitorName}
-    </ClickableDiv>
-  </Div>
-);
-
 const Monitors = observer(({ clusterId, kind, name, namespace }: ResourceProps) => {
-  const settings = use(useSyncInject(datadogSettingsBunch.persistable));
-  const { value } = useSubscribable(useSyncInject(monitorGroupsBunch.subscribable, clusterId, kind, name, namespace ?? ""));
-  const result = use(value).get();
-  const openUrl = useInject(openUrlInBrowserInjectable)();
+  const settings = use(useSyncInject(datadogSettingsBunch.persistable)).get();
   const navigateToPreferences = useInject(navigateToPreferencesInjectionToken)();
 
-  if (result.state === "not-configured") {
-    return <PlainButton $onClick={() => navigateToPreferences({ pageId: packageJson.name })}>Add Datadog API keys to see monitors</PlainButton>;
-  }
-
-  if (result.state === "failed") {
-    return <Span $color="critical">{result.message}</Span>;
-  }
-
-  if (result.groups.length === 0) {
-    return <NoItemsDetailItem>No monitor is grouped by this resource</NoItemsDetailItem>;
+  if (!settings.apiKey || !settings.applicationKey) {
+    return (
+      <DrawerItem name="Monitors">
+        <PlainButton $onClick={() => navigateToPreferences({ pageId: packageJson.name })}>Add Datadog API keys to see monitors</PlainButton>
+      </DrawerItem>
+    );
   }
 
   return (
-    <Div $flex={{ direction: "vertical", gap: "xs" }}>
-      {result.groups.map((group) => (
-        <MonitorRow key={`${group.monitorId}/${group.group}`} group={group} onOpen={() => openUrl(buildMonitorLink(settings.get().site, group.monitorId))} />
-      ))}
-    </Div>
+    <>
+      <DrawerSubTitle>Monitors</DrawerSubTitle>
+      <Div style={{ height: "9rem" }}>
+        <Table kind={monitorGroupsTableKind} params={[clusterId, kind, name, namespace ?? ""]} />
+      </Div>
+    </>
   );
 });
 
@@ -149,11 +119,9 @@ const DatadogSection = ({ clusterId, resource }: SectionProps) => {
       <Piece>
         <Links {...props} />
       </Piece>
-      <DrawerItem name="Monitors">
-        <Piece loading="Loading monitors…">
-          <Monitors {...props} />
-        </Piece>
-      </DrawerItem>
+      <Piece loading="Loading monitors…">
+        <Monitors {...props} />
+      </Piece>
       <Piece loading="Loading Datadog data…">
         <Telemetry {...props} />
       </Piece>

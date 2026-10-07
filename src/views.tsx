@@ -1,5 +1,5 @@
 import { Badge } from "@k8slens/badge";
-import { ClickableDiv, Code, Div, Span, Svg } from "@k8slens/element-components";
+import { ClickableDiv, Div, Span, Svg } from "@k8slens/element-components";
 import { PlainButton } from "@k8slens/input-components";
 import { navigateToPreferencesInjectionToken } from "@k8slens/preferences-contracts";
 import { useSubscribable } from "@k8slens/subscribable-react";
@@ -9,30 +9,32 @@ import { action, type IObservableValue } from "mobx";
 import { observer } from "mobx-react";
 import { type ReactNode, Suspense, use, useEffect } from "react";
 import packageJson from "../package.json";
-import { type DatadogEvent, type DatadogMonitor, eventsBunch, type Loaded, metricSeriesBunch, monitorsBunch } from "./datadog-data.injectable";
-import { buildMonitorLink } from "./datadog-links";
-import {
-  type DatadogScope,
-  eventExplorerLink,
-  eventQuery,
-  formatValue,
-  type MetricDefinition,
-  metricExplorerLink,
-  metricQuery,
-  monitorsLink,
-  ranges,
-  type RangeId,
-} from "./datadog-queries";
+import { type Loaded, metricSeriesBunch, monitorsBunch } from "./datadog-data.injectable";
+import { type DatadogScope, formatValue, type MetricDefinition, metricExplorerLink, metricQuery, ranges, type RangeId } from "./datadog-queries";
 import { DatadogErrorBoundary } from "./error-boundary";
 import { openUrlInBrowserInjectable } from "./open-in-datadog.injectable";
 import { datadogSettingsBunch } from "./settings.injectable";
 
 const refreshEveryMs = 60_000;
 
-export const statusColor = (status: string) =>
-  (({ Alert: "critical", Warn: "warning", OK: "success", error: "critical", warning: "warning", success: "success" }) as const)[
-    status as "Alert"
-  ] ?? "grey40";
+const statusColors: Record<string, "critical" | "warning" | "success" | "grey40"> = {
+  // Monitors
+  Alert: "critical",
+  Warn: "warning",
+  OK: "success",
+  // Events
+  error: "critical",
+  warn: "warning",
+  warning: "warning",
+  ok: "success",
+  success: "success",
+};
+
+/** The badge colour of a monitor's or an event's status; anything else, info included, is neutral. */
+export const statusColor = (status: string) => statusColors[status] ?? "grey40";
+
+/** A heading inside a view, sized and weighted like Lens's own section titles. */
+export const SectionTitle = ({ children }: { children: ReactNode }) => <Span $font={{ size: "l", bold: true }}>{children}</Span>;
 
 export const Muted = ({ children }: { children: ReactNode }) => <Span $color="textMuted">{children}</Span>;
 
@@ -129,9 +131,13 @@ const MetricChartBody = observer(({ definition, scope, rangeId }: { definition: 
           return (
             <>
               <Sparkline points={points} />
-              <Div $flex={{ direction: "horizontal", horizontalAlign: "space-between" }}>
-                <Muted>now {formatValue(values[values.length - 1], definition.unit)}</Muted>
-                <Muted>max {formatValue(Math.max(...values), definition.unit)}</Muted>
+              <Div $flex={{ direction: "horizontal", horizontalAlign: "space-between", wrap: true, gap: { column: "s" } }}>
+                <Span $color="textMuted" $font={{ noWrap: true }}>
+                  now {formatValue(values[values.length - 1], definition.unit)}
+                </Span>
+                <Span $color="textMuted" $font={{ noWrap: true }}>
+                  max {formatValue(Math.max(...values), definition.unit)}
+                </Span>
               </Div>
             </>
           );
@@ -149,87 +155,7 @@ export const MetricChart = (props: { definition: MetricDefinition; scope: Datado
   </Div>
 );
 
-// --- Events --------------------------------------------------------------------------------
-
-const EventRow = ({ event, onOpen }: { event: DatadogEvent; onOpen: () => void }) => (
-  <Div $flex={{ direction: "horizontal", gap: "s", verticalAlign: "center" }}>
-    <Badge small label={event.status} $backgroundColor={statusColor(event.status)} $color="white" />
-    <Muted>{event.timestamp ? new Date(event.timestamp).toLocaleString() : ""}</Muted>
-    <ClickableDiv $onClick={onOpen} $tooltip={event.message.slice(0, 500) || event.title} $color="link">
-      {event.title}
-    </ClickableDiv>
-  </Div>
-);
-
-export const EventList = observer(({ scope, rangeId, limit }: { scope: DatadogScope; rangeId: RangeId; limit?: number }) => {
-  const site = useSite();
-  const openUrl = useInject(openUrlInBrowserInjectable)();
-  const { value, refresh } = useSubscribable(useSyncInject(eventsBunch.subscribable, eventQuery(scope), rangeId));
-  const loaded = use(value).get();
-
-  useRefreshing(refresh);
-
-  return (
-    <LoadedView loaded={loaded}>
-      {(events) => (
-        <Div $flex={{ direction: "vertical", gap: "xs" }}>
-          {events.length === 0 && <Muted>No events in this range</Muted>}
-          {events.slice(0, limit ?? events.length).map((event) => (
-            <EventRow key={event.id} event={event} onOpen={() => openUrl(eventExplorerLink(site, scope, rangeId, event.id))} />
-          ))}
-          <ClickableDiv $onClick={() => openUrl(eventExplorerLink(site, scope, rangeId))} $color="link">
-            {limit && events.length > limit ? `All ${events.length} events in Datadog →` : "Open in Datadog's event explorer →"}
-          </ClickableDiv>
-        </Div>
-      )}
-    </LoadedView>
-  );
-});
-
 // --- Monitors ------------------------------------------------------------------------------
-
-const MonitorRow = ({ monitor, onOpen }: { monitor: DatadogMonitor; onOpen: () => void }) => (
-  <Div $flex={{ direction: "vertical", gap: "xxs" }} $padding={{ bottom: "s" }}>
-    <Div $flex={{ direction: "horizontal", gap: "s", verticalAlign: "center" }}>
-      <Badge small label={monitor.status} $backgroundColor={statusColor(monitor.status)} $color="white" />
-      <ClickableDiv $onClick={onOpen} $color="link">
-        {monitor.name}
-      </ClickableDiv>
-      <Muted>{monitor.type}</Muted>
-    </Div>
-    {monitor.query && (
-      <Code $color="textMuted" $font={{ size: "s", forceWrap: true }}>
-        {monitor.query}
-      </Code>
-    )}
-    {monitor.lastTriggered && <Muted>Last triggered {new Date(monitor.lastTriggered).toLocaleString()}</Muted>}
-  </Div>
-);
-
-export const MonitorList = observer(({ query = "" }: { query?: string }) => {
-  const site = useSite();
-  const openUrl = useInject(openUrlInBrowserInjectable)();
-  const { value, refresh } = useSubscribable(useSyncInject(monitorsBunch.subscribable, query));
-  const loaded = use(value).get();
-
-  useRefreshing(refresh);
-
-  return (
-    <LoadedView loaded={loaded}>
-      {(monitors) => (
-        <Div $flex={{ direction: "vertical", gap: "xs" }}>
-          {monitors.length === 0 && <Muted>No monitors</Muted>}
-          {monitors.map((monitor) => (
-            <MonitorRow key={monitor.id} monitor={monitor} onOpen={() => openUrl(buildMonitorLink(site, monitor.id))} />
-          ))}
-          <ClickableDiv $onClick={() => openUrl(monitorsLink(site))} $color="link">
-            Manage monitors in Datadog →
-          </ClickableDiv>
-        </Div>
-      )}
-    </LoadedView>
-  );
-});
 
 /** Counts of monitors by status, for an overview. */
 export const MonitorSummary = observer(() => {

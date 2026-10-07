@@ -16,6 +16,14 @@ This is a community extension. It is not made or endorsed by Datadog.
 - **Datadog Agent status** in the status bar for the cluster you are looking at, such as `Datadog 5/5` when five of five Agent pods are ready. Hover it for each Agent and Cluster Agent workload and its version, and click it to open the cluster's Datadog view.
 - **Command palette**: *Datadog: Open Datadog view of cluster*, *Datadog: Open cluster in Datadog* and *Datadog: Open preferences*.
 
+![The Datadog view of a cluster: CPU, memory, network and restart charts from Datadog, the monitors by status, and the latest events](assets/datadog-view.png)
+
+The Monitors tab lists every monitor of your Datadog account, and the Events tab the cluster's events, each row linking to Datadog:
+
+![The Monitors tab: each monitor's status, name, type, query and when it last triggered](assets/datadog-monitors.png)
+
+![The Events tab: Kubernetes events and monitor alerts and recoveries, newest first, with their source](assets/datadog-events.png)
+
 ## Install
 
 [Open Datadog for Lens in Lens](https://app.k8slens.dev/lens-launcher?c=lens%3A%2F%2Fapp%2Fopen%2Fextension%3Fname%3D%2540k8slens%252Fdatadog) and click Install there. The link offers Lens for download when it is not installed yet.
